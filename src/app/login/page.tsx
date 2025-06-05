@@ -47,9 +47,21 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (error: any) {
       console.error("Login error:", error);
+      let errorMessage = "An unexpected error occurred. Please try again.";
+      // Firebase error codes for invalid credentials can vary slightly or be more general.
+      // 'auth/invalid-credential' is common.
+      // 'auth/user-not-found' and 'auth/wrong-password' are older or sometimes still used.
+      if (error.code === 'auth/invalid-credential' || 
+          error.code === 'auth/user-not-found' || 
+          error.code === 'auth/wrong-password') {
+        errorMessage = "Invalid email or password. Please check your credentials and try again.";
+      } else if (error.message) {
+        // Fallback to Firebase's message for other types of errors
+        errorMessage = error.message;
+      }
       toast({
         title: "Login Failed",
-        description: error.message || "An unexpected error occurred.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -178,3 +190,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
