@@ -1,11 +1,17 @@
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { 
+  getAuth, 
+  type Auth, 
+  GoogleAuthProvider // Import GoogleAuthProvider
+} from 'firebase/auth';
 import {
   getFirestore,
-  // Removed: initializeFirestore, persistentLocalCache, persistentMultipleTabManager
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   type Firestore,
-  // Removed: type FirestoreError
+  type FirestoreError,
 } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
@@ -18,32 +24,54 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let appInstance: FirebaseApp;
-let authInstance: Auth;
-let firestoreInstance: Firestore;
-let storageInstance: FirebaseStorage;
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
+let googleProvider: GoogleAuthProvider; // Declare googleProvider
 
 if (typeof window === 'undefined') {
   // Server-side initialization
-  appInstance = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-  authInstance = getAuth(appInstance);
-  firestoreInstance = getFirestore(appInstance); // Server doesn't use client-side offline persistence
-  storageInstance = getStorage(appInstance);
+  app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  auth = getAuth(app);
+  db = getFirestore(app); // Server doesn't use client-side offline persistence
+  storage = getStorage(app);
+  googleProvider = new GoogleAuthProvider();
   // console.log('Firebase initialized for server/non-browser environment.');
 } else {
   // Client-side initialization
-  appInstance = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-  authInstance = getAuth(appInstance);
-  storageInstance = getStorage(appInstance);
-  
-  // Initialize Firestore without persistent cache - relies on network / in-memory cache
-  firestoreInstance = getFirestore(appInstance);
-  // console.log('Firestore client-side: Initialized with default (in-memory) cache.');
+  app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  auth = getAuth(app);
+  storage = getStorage(app);
+  googleProvider = new GoogleAuthProvider(); // Initialize for client
+
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+    // console.log('Firestore client-side: Initialized with persistent cache.');
+  } catch (error) {
+    const typedError = error as FirestoreError;
+    if (typedError.code === 'failed-precondition') {
+      console.warn(
+        'Firestore: Multiple tabs open, persistence can only be enabled in one tab at a time.'
+      );
+      // Fallback to default (in-memory) cache if persistent cache fails
+      db = getFirestore(app);
+      // console.log('Firestore client-side: Initialized with default (in-memory) cache due to failed precondition.');
+    } else if (typedError.code === 'unimplemented') {
+      console.warn(
+        'Firestore: The current browser does not support all of the features required to enable persistence.'
+      );
+      db = getFirestore(app);
+      // console.log('Firestore client-side: Initialized with default (in-memory) cache due to unimplemented feature.');
+    } else {
+      console.error("Error initializing Firestore with persistence:", typedError);
+      db = getFirestore(app); // Fallback
+    }
+  }
 }
 
-export { 
-  appInstance as app, 
-  authInstance as auth, 
-  firestoreInstance as db, 
-  storageInstance as storage 
-};
+export { app, auth, db, storage, googleProvider }; // Export googleProvider
