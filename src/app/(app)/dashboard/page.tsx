@@ -7,12 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Users, BookOpen, BarChart3, Lightbulb, Send } from 'lucide-react';
+import { Loader2, Users, BookOpen, BarChart3, Lightbulb, Send, DatabaseZap } from 'lucide-react';
 import { generateProactiveSuggestions, type ProactiveSuggestionsInput } from '@/ai/flows/proactive-suggestions';
 import { generateContextAwareAnnouncement } from '@/ai/flows/generate-announcement';
 import type { Announcement, UserProfile } from '@/types';
 import { collection, query, where, getDocs, serverTimestamp, addDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
+import { seedFirestoreData } from '@/lib/firebase/seedData'; // Import the seed function
+import { useToast } from '@/hooks/use-toast'; // Import useToast
+
 
 // Mock data - replace with actual Firestore queries
 const MOCK_STUDENT_DATA_SUMMARY = "Student A: Grades - Math B, Science A, English C. Attendance - 90%. Student B: Grades - Math C, Science B, English B. Attendance - 75%.";
@@ -29,6 +32,8 @@ export default function DashboardPage() {
   const [tailoredAnnouncement, setTailoredAnnouncement] = useState<string>("");
   const [loadingAnnouncement, setLoadingAnnouncement] = useState(true);
   const [formattedCreatedAt, setFormattedCreatedAt] = useState<string>('');
+  const [isSeeding, setIsSeeding] = useState(false); // State for seeding
+  const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -120,6 +125,24 @@ export default function DashboardPage() {
     setLoadingSuggestions(false);
   };
 
+  const handleSeedData = async () => {
+    if (!userProfile || userProfile.role !== 'admin') {
+      toast({ title: "Unauthorized", description: "Only admins can seed data.", variant: "destructive" });
+      return;
+    }
+    setIsSeeding(true);
+    try {
+      await seedFirestoreData(userProfile.uid); // Pass admin UID for 'createdBy' fields
+      toast({ title: "Success", description: "Dummy data seeded successfully!" });
+      // Optionally, refresh metrics or other data shown on dashboard
+    } catch (error: any) {
+      console.error("Error seeding data:", error);
+      toast({ title: "Error Seeding Data", description: error.message || "Failed to seed dummy data.", variant: "destructive" });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   if (!userProfile) {
     return <div className="text-center p-8">Loading user profile...</div>;
   }
@@ -177,7 +200,7 @@ export default function DashboardPage() {
             <CardDescription>AI-powered insights to help you manage effectively.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleGenerateSuggestions} disabled={loadingSuggestions} className="mb-4">
+            <Button onClick={handleGenerateSuggestions} disabled={loadingSuggestions || isSeeding} className="mb-4">
               {loadingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart3 className="mr-2 h-4 w-4" />}
               Generate Suggestions
             </Button>
@@ -210,7 +233,11 @@ export default function DashboardPage() {
               </p>
               <div className="prose prose-sm max-w-none p-3 bg-muted rounded-md">
                 <p className="font-semibold">For {userProfile.role}s:</p>
-                {tailoredAnnouncement || "No tailored content available."}
+                {tailoredAnnouncement ? (
+                    <div dangerouslySetInnerHTML={{ __html: tailoredAnnouncement.replace(/\n/g, '<br />') }} />
+                ) : (
+                    "No tailored content available."
+                )}
               </div>
             </div>
           ) : (
@@ -218,6 +245,28 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {userProfile.role === 'admin' && (
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><DatabaseZap className="text-accent h-6 w-6" /> Seed Database</CardTitle>
+            <CardDescription>Populate Firestore with dummy data for testing purposes. (Admin Only)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleSeedData} disabled={isSeeding} className="mb-4">
+              {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DatabaseZap className="mr-2 h-4 w-4" />}
+              Seed Dummy Data
+            </Button>
+            <Alert variant="destructive">
+              <AlertTitle>Warning!</AlertTitle>
+              <AlertDescription>
+                This will add multiple new documents to your Firestore database. Use with caution, especially on a production environment.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
+
