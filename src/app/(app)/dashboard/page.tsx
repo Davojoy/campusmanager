@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -27,6 +28,7 @@ export default function DashboardPage() {
   const [latestAnnouncement, setLatestAnnouncement] = useState<Announcement | null>(null);
   const [tailoredAnnouncement, setTailoredAnnouncement] = useState<string>("");
   const [loadingAnnouncement, setLoadingAnnouncement] = useState(true);
+  const [formattedCreatedAt, setFormattedCreatedAt] = useState<string>('');
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -82,6 +84,23 @@ export default function DashboardPage() {
     fetchDashboardData();
     fetchLatestAnnouncement();
   }, [userProfile]);
+
+  useEffect(() => {
+    if (latestAnnouncement?.createdAt) {
+      if (typeof latestAnnouncement.createdAt.toDate === 'function') {
+        setFormattedCreatedAt(new Date(latestAnnouncement.createdAt.toDate()).toLocaleDateString());
+      } else {
+        try {
+          setFormattedCreatedAt(new Date(latestAnnouncement.createdAt as any).toLocaleDateString());
+        } catch (e) {
+          console.error("Error formatting announcement date in useEffect:", e);
+          setFormattedCreatedAt('Date unavailable');
+        }
+      }
+    } else {
+      setFormattedCreatedAt('');
+    }
+  }, [latestAnnouncement]);
 
   const handleGenerateSuggestions = async () => {
     if (!userProfile || (userProfile.role !== 'admin' && userProfile.role !== 'teacher')) return;
@@ -187,7 +206,7 @@ export default function DashboardPage() {
             <div>
               <h3 className="text-lg font-semibold mb-1">{latestAnnouncement.title}</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                Posted on: {new Date(latestAnnouncement.createdAt.toDate()).toLocaleDateString()}
+                Posted on: {formattedCreatedAt || 'Loading date...'}
               </p>
               <div className="prose prose-sm max-w-none p-3 bg-muted rounded-md">
                 <p className="font-semibold">For {userProfile.role}s:</p>
